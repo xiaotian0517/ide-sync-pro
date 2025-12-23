@@ -164,12 +164,84 @@ fn merge_json_values(target: &mut Value, source: &Value) {
     }
 }
 
+/// Get the full CLI path for an IDE executable
+fn get_cli_path(executable: &str) -> String {
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: CLI tools are inside .app bundles
+        let app_paths: Vec<(&str, &str)> = vec![
+            ("code", "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"),
+            ("code-insiders", "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders"),
+            ("codium", "/Applications/VSCodium.app/Contents/Resources/app/bin/codium"),
+            ("cursor", "/Applications/Cursor.app/Contents/Resources/app/bin/cursor"),
+            ("cursor-nightly", "/Applications/Cursor Nightly.app/Contents/Resources/app/bin/cursor-nightly"),
+            ("windsurf", "/Applications/Windsurf.app/Contents/Resources/app/bin/windsurf"),
+            ("antigravity", "/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity"),
+            ("kiro", "/Applications/Kiro.app/Contents/Resources/app/bin/kiro"),
+            ("lingma", "/Applications/Lingma.app/Contents/Resources/app/bin/lingma"),
+            ("trae", "/Applications/Trae.app/Contents/Resources/app/bin/trae"),
+            ("positron", "/Applications/Positron.app/Contents/Resources/app/bin/positron"),
+            ("codeium", "/Applications/Codeium.app/Contents/Resources/app/bin/codeium"),
+            ("code-oss", "/Applications/Code - OSS.app/Contents/Resources/app/bin/code-oss"),
+        ];
+
+        for (name, path) in &app_paths {
+            if executable == *name && Path::new(path).exists() {
+                return path.to_string();
+            }
+        }
+
+        // Fallback: try the executable name directly (might be in PATH)
+        executable.to_string()
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: CLI tools are usually in LocalAppData or Program Files
+        if let Some(local_app_data) = dirs::data_local_dir() {
+            let possible_paths: Vec<(&str, Vec<std::path::PathBuf>)> = vec![
+                ("code", vec![
+                    local_app_data.join("Programs/Microsoft VS Code/bin/code.cmd"),
+                    std::path::PathBuf::from("C:/Program Files/Microsoft VS Code/bin/code.cmd"),
+                ]),
+                ("cursor", vec![
+                    local_app_data.join("Programs/cursor/resources/app/bin/cursor.cmd"),
+                    local_app_data.join("cursor/Cursor.exe"),
+                ]),
+                ("windsurf", vec![
+                    local_app_data.join("Programs/Windsurf/bin/windsurf.cmd"),
+                ]),
+            ];
+
+            for (name, paths) in possible_paths {
+                if executable == name {
+                    for path in paths {
+                        if path.exists() {
+                            return path.to_string_lossy().to_string();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: try the executable name directly
+        executable.to_string()
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        // Linux: usually in PATH
+        executable.to_string()
+    }
+}
+
 fn sync_extensions_cli(source: &IdeProfile, target: &IdeProfile, log: &mut Vec<String>) -> Result<(), String> {
     // 1. Get list from source
-    let output = Command::new(&source.executable)
+    let source_cli = get_cli_path(&source.executable);
+    let output = Command::new(&source_cli)
         .arg("--list-extensions")
         .output()
-        .map_err(|_| format!("Failed to run '{}'. Is it in PATH?", source.executable))?;
+        .map_err(|_| format!("Failed to run '{}'. CLI not found or not installed.", source.executable))?;
 
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
@@ -181,9 +253,10 @@ fn sync_extensions_cli(source: &IdeProfile, target: &IdeProfile, log: &mut Vec<S
     log.push(format!("Found {} extensions in {}", extensions.len(), source.name));
 
     // 2. Install on target
+    let target_cli = get_cli_path(&target.executable);
     for ext in extensions {
         log.push(format!("Installing {} on {}...", ext, target.name));
-        let install = Command::new(&target.executable)
+        let install = Command::new(&target_cli)
             .arg("--install-extension")
             .arg(ext)
             .output();
