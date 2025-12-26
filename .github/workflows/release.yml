@@ -45,17 +45,26 @@ jobs:
 
       - name: Build Tauri App (macOS)
         if: runner.os == 'macOS'
+        shell: bash
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: npm run tauri build -- --target universal-apple-darwin
+          RAW_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          export TAURI_SIGNING_PRIVATE_KEY="$(printf '%s' "$RAW_TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r\n')"
+          export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+          npm run tauri build -- --target universal-apple-darwin
 
       - name: Build Tauri App (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: npm run tauri build
+          RAW_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sanitized = ($env:RAW_TAURI_SIGNING_PRIVATE_KEY -replace "(`r|`n)", '')
+          $env:TAURI_SIGNING_PRIVATE_KEY = $sanitized
+          $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
+          npm run tauri build
 
       - name: Prepare macOS Assets
         if: runner.os == 'macOS'
