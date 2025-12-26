@@ -65,62 +65,12 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Prepare Tauri signing key
-        shell: bash
-        env:
-          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          if [ -z "$SIGNING_KEY" ]; then
-            echo "TAURI_SIGNING_PRIVATE_KEY not set, skipping signing"
-            exit 0
-          fi
-
-          RAW="$SIGNING_KEY"
-          KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
-
-          # Case 1: Raw two-line format (starts with "untrusted comment:")
-          if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
-            printf '%s\n' "$RAW" > "$KEY_PATH"
-            echo "Using raw two-line key format"
-          else
-            # Case 2: Base64 wrapped
-            if DECODED=$(printf '%s' "$RAW" | (base64 --decode 2>/dev/null || base64 -D 2>/dev/null)) \
-               && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
-              printf '%s\n' "$DECODED" > "$KEY_PATH"
-              echo "Decoded base64 wrapped key"
-            else
-              # Case 3: Single line base64
-              if echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
-                ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
-                printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
-                echo "Using single-line base64 key"
-              else
-                echo "Unable to parse TAURI_SIGNING_PRIVATE_KEY format" >&2
-                exit 1
-              fi
-            fi
-          fi
-
-          # Encode key file content as base64 for env var
-          if command -v base64 >/dev/null 2>&1; then
-            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
-          else
-            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
-          fi
-
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
-          if [ -n "$SIGNING_KEY_PASSWORD" ]; then
-            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$SIGNING_KEY_PASSWORD" >> $GITHUB_ENV
-          fi
-          echo "Tauri signing key prepared"
-
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'IDE Sync Pro ${{ github.ref_name }}'
