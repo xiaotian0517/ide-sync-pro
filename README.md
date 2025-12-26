@@ -92,6 +92,20 @@ npm run tauri build
 
 前往 [Releases](https://github.com/xiaotian0517/ide-sync-pro/releases) 页面下载对应平台的安装包。
 
+- **macOS Apple Silicon (M1/M2/M3)**: 下载 `*_aarch64.dmg`
+- **macOS Intel**: 下载 `*_x64.dmg`
+- **Windows**: 下载 `*.msi` 或 `*.exe`
+
+### macOS 首次打开提示「已损坏」
+
+由于应用未经 Apple 签名，macOS 可能提示「应用已损坏，无法打开」。这是正常现象，请在终端执行以下命令：
+
+```bash
+xattr -cr /Applications/IDE\ Sync\ Pro.app
+```
+
+然后重新打开应用即可正常使用。
+
 ## Usage
 
 ### 基本同步流程
